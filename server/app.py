@@ -138,6 +138,74 @@ def create_restaurant_pizza():
     except IntegrityError:
         db.session.rollback()
         return jsonify({"errors": ["validation errors"]}), 400
-git push 
+    
+
+    #adding new resturant
+@app.route('/restaurants_pizza', methods=['POST'])
+def create_restaurant():
+    data = request.get_json()
+
+  
+    name = data.get('name')
+    address = data.get('address')
+    restaurant_pizzas_data = data.get('restaurant_pizzas', [])
+
+    # Validate required fields
+    if not name or not address:
+        return jsonify({"errors": ["'name' and 'address' are required"]}), 400
+
+    # Create the restaurant instance
+    restaurant = Restaurant(name=name, address=address)
+    db.session.add(restaurant)
+    db.session.commit()  
+
+    # Process nested restaurant_pizzas data
+    for rp_data in restaurant_pizzas_data:
+        price = rp_data.get('price')
+        pizza_data = rp_data.get('pizza')
+        if not pizza_data or 'id' not in pizza_data:
+            return jsonify({"errors": ["Pizza data with an 'id' is required for each restaurant pizza"]}), 400
+
+        # Option 1: If the pizza already exists in your database:
+        pizza = Pizza.query.get(pizza_data['id'])
+        if not pizza:
+            # Optionally, you might create a new Pizza if it doesn't exist
+            pizza = Pizza(name=pizza_data.get('name'), ingredients=pizza_data.get('ingredients'))
+            db.session.add(pizza)
+            db.session.commit()
+
+        # Option 2: Alternatively, if you expect the pizza to exist, return an error if not found.
+        # if not pizza:
+        #     return jsonify({"errors": [f"Pizza with id {pizza_data['id']} not found"]}), 400
+
+        # Validate price if needed
+        if price is None or not (1 <= price <= 30):
+            return jsonify({"errors": ["Price is required and must be between 1 and 30"]}), 400
+
+        # Create the RestaurantPizza association
+        restaurant_pizza = RestaurantPizza(price=price, pizza_id=pizza.id, restaurant_id=restaurant.id)
+        db.session.add(restaurant_pizza)
+
+    db.session.commit()
+
+    # Return the created restaurant (and optionally the associated pizzas)
+    return jsonify({
+        "id": restaurant.id,
+        "name": restaurant.name,
+        "address": restaurant.address,
+        "restaurant_pizzas": [
+            {
+                "id": rp.id,
+                "price": rp.price,
+                "pizza": {
+                    "id": rp.pizza.id,
+                    "name": rp.pizza.name,
+                    "ingredients": rp.pizza.ingredients
+                }
+            }
+            for rp in restaurant.restaurant_pizzas  # Assuming a relationship is set up in your model
+        ]
+    }), 201
+
 if __name__ == "__main__":
     app.run(port=5555, debug=True)
